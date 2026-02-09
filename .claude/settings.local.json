@@ -9,7 +9,9 @@
       "Bash(cargo check:*)",
       "Bash(cargo clippy:*)",
       "Bash(cargo test:*)",
-      "Bash(jj commit:*)"
+      "Bash(jj commit:*)",
+      "Bash(jj file untrack:*)",
+      "Bash(jj squash:*)"
     ]
   }
 }

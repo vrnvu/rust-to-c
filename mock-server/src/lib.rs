@@ -1,3 +1,13 @@
+//! In-memory CRUD todo API built on Axum.
+//!
+//! # Design
+//! State lives in a `HashMap<Uuid, Todo>` behind an `Arc<RwLock<..>>`, shared
+//! across all handlers. Each call to [`app`] creates a fresh, empty store so
+//! integration tests get isolation for free.
+//!
+//! No persistence — this crate exists as a reference server for the rust-to-c
+//! translation project.
+
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -10,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{net::TcpListener, sync::RwLock};
 use uuid::Uuid;
 
+/// A single todo item, the core domain type for every endpoint.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Todo {
     pub id: Uuid,
@@ -17,6 +28,8 @@ pub struct Todo {
     pub completed: bool,
 }
 
+/// Request body for `POST /todos`. The `completed` field defaults to `false`
+/// when omitted, so clients only need to send a title.
 #[derive(Deserialize)]
 pub struct CreateTodo {
     pub title: String,
@@ -24,14 +37,22 @@ pub struct CreateTodo {
     pub completed: bool,
 }
 
+/// Request body for `PUT /todos/{id}`. All fields are optional; only the
+/// fields present in the JSON payload are applied, leaving the rest unchanged.
 #[derive(Deserialize)]
 pub struct UpdateTodo {
     pub title: Option<String>,
     pub completed: Option<bool>,
 }
 
+/// Shared in-memory store. `RwLock` allows concurrent reads from `GET`/`LIST`
+/// handlers while serializing writes from `POST`/`PUT`/`DELETE`.
 pub type Db = Arc<RwLock<HashMap<Uuid, Todo>>>;
 
+/// Build a fresh Axum router with an empty todo store.
+///
+/// Each call creates independent state, so tests can run in parallel without
+/// shared-mutable-state conflicts.
 pub fn app() -> Router {
     let db: Db = Arc::new(RwLock::new(HashMap::new()));
     Router::new()
@@ -40,6 +61,7 @@ pub fn app() -> Router {
         .with_state(db)
 }
 
+/// Serve the todo API on the given listener until the process is stopped.
 pub async fn run(listener: TcpListener) -> Result<(), std::io::Error> {
     axum::serve(listener, app()).await
 }
