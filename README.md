@@ -1,31 +1,27 @@
-## 1. Goals & non-goals (important to align Claude)
+# rust-to-c
+
+Cross-language HTTP API client: Rust core → C ABI → language wrappers.
+
+## 1. Goals & non-goals
 
 ### Goals
 
-* Implement OAuth2 / OpenID flows:
+* Rust HTTP API client for a CRUD todo-list service
+* Stable C ABI via `extern "C"`
+* Language wrappers:
+  * TypeScript (Node.js via N-API + Browser via WASM)
+  * Java (JNI + Android NDK)
+  * C# (P/Invoke)
+  * C++ (thin RAII wrapper)
+* Mock HTTP server (Rust/Axum) for testing
+* Cross-language integration tests using shared test vectors
+* Host-does-IO pattern: Rust core builds requests, host executes HTTP
 
-  * Authorization Code + PKCE
-  * Device Authorization Flow
-  * OTT (one-time token) exchange
-* Support:
+### Non-goals (out of scope for MVP)
 
-  * Web (JS)
-  * Unity (C#)
-  * Unreal (C++)
-* Single authoritative implementation of:
-
-  * PKCE
-  * OAuth state machine
-  * Token lifecycle (expiry, refresh)
-* Enable **cross-language integration tests** using the *same core logic*
-* MVP-level ergonomics, not final DX polish
-
-### Non-goals (explicitly out of scope for MVP)
-
+* Auth / OAuth / token management
 * UI components
-* Token storage implementations
-* Advanced error localization
-* Full OpenAPI-driven SDKs
+* Production-grade error handling / retries
 * High-level idiomatic APIs per language
 
 ---
@@ -34,306 +30,270 @@
 
 ```
 ┌──────────────────────────┐
-│        Rust Core         │
+│    Mock Server (Axum)    │
+│  CRUD Todo REST API      │
+│  GET/POST/PUT/DELETE     │
+└─────────────▲────────────┘
+              │ HTTP
+              │
+┌─────────────┴────────────┐
+│       Rust Core          │
 │--------------------------│
-│ OAuth / OIDC engine      │
-│ PKCE generation          │
-│ Device flow state        │
-│ Token lifecycle          │
+│ API client logic         │
+│ Request builder          │
+│ Response parser          │
+│ DTOs / domain types      │
 │ Error classification     │
 └─────────────▲────────────┘
               │
       Stable C ABI (extern "C")
               │
-┌─────────────┼─────────────┐
-│             │             │
-│   WASM      │   Native    │
-│   (Web)     │ (Unity/C++) │
-│             │             │
-└─────▲───────┴───────▲─────┘
-      │               │
- JS wrapper       C# / C++ wrapper
-      │               │
+┌─────────────┼────────────────────┐
+│             │                    │
+│   WASM    Native    Native    Native
+│   (Web)   (Java)   (C#)     (C++)
+│             │                    │
+└──▲──────────┼──────────────▲─────┘
+   │          │              │
+ TS wrapper  JNI binding   C# / C++ wrapper
+   │          │              │
 Integration tests (shared test vectors)
 ```
 
 Key principle:
 
-> **The Rust core owns all auth logic. Hosts only perform I/O.**
+> **The Rust core owns all API logic. Hosts only perform HTTP I/O.**
 
 ---
 
-## 3. Rust core design
+## 3. Host-does-IO pattern
+
+The Rust core is **synchronous and does no I/O**. All flows follow this loop:
+
+1. Host calls Rust core (e.g. `create_todo(todo)`)
+2. Core returns an `HttpRequest` struct (method, URL, headers, body)
+3. Host executes HTTP however it wants (fetch, OkHttp, HttpClient, etc.)
+4. Host feeds back an `HttpResponse` struct (status, headers, body)
+5. Core parses response, returns typed result or error
+
+Each language wrapper decides its own async strategy:
+
+* **JS/TS**: `async/await` + `fetch`
+* **Java/Android**: `CompletableFuture` or coroutines
+* **C#**: `Task` / `async`
+* **C++**: callbacks, futures, or blocking
+
+---
+
+## 4. Mock server (Axum)
+
+Simple REST API for a todo list:
+
+| Method   | Path          | Description       |
+|----------|---------------|-------------------|
+| `GET`    | `/todos`      | List all todos    |
+| `GET`    | `/todos/:id`  | Get a todo by ID  |
+| `POST`   | `/todos`      | Create a todo     |
+| `PUT`    | `/todos/:id`  | Update a todo     |
+| `DELETE` | `/todos/:id`  | Delete a todo     |
+
+Todo schema:
+
+```json
+{
+  "id": "uuid",
+  "title": "string",
+  "completed": false
+}
+```
+
+---
+
+## 5. Rust core design
 
 ### Crate structure
 
 ```
-auth-core/
-├─ src/
-│  ├─ lib.rs
-│  ├─ pkce.rs
-│  ├─ oauth.rs
-│  ├─ device_flow.rs
-│  ├─ token.rs
-│  ├─ errors.rs
-│  ├─ state_machine.rs
-│  └─ ffi/
-│     ├─ mod.rs
-│     └─ c_api.rs
-├─ Cargo.toml
+Cargo.toml (workspace)
+├─ core/
+│  ├─ src/
+│  │  ├─ lib.rs
+│  │  ├─ types.rs        # Todo, CreateTodo, UpdateTodo DTOs
+│  │  ├─ client.rs       # API client (builds HttpRequest, parses HttpResponse)
+│  │  ├─ http.rs         # HttpRequest, HttpResponse, HttpMethod
+│  │  └─ error.rs        # ApiError enum
+│  └─ Cargo.toml
+├─ ffi/
+│  ├─ src/
+│  │  ├─ lib.rs
+│  │  └─ c_api.rs        # extern "C" functions
+│  ├─ include/
+│  │  └─ todo_client.h   # Generated C header
+│  └─ Cargo.toml
+├─ mock-server/
+│  ├─ src/
+│  │  └─ main.rs
+│  └─ Cargo.toml
+└─ test-vectors/
+   ├─ create-todo.json
+   ├─ list-todos.json
+   ├─ update-todo.json
+   └─ delete-todo.json
 ```
 
 ### Core design rules
 
-* No async exposed across the ABI
-* No networking
-* No storage
-* No system clock access without injection
-* No panics across FFI (use `catch_unwind`)
+* No async
+* No networking (host-does-IO)
+* No panics across FFI (`catch_unwind`)
 * Deterministic behavior for testing
-
-### State-machine driven flows
-
-All flows are modeled as explicit steps:
-
-```rust
-enum AuthStep {
-  NeedAuthorizationUrl { url: String },
-  NeedUserCode { code: String, verification_uri: String },
-  NeedPoll { wait_seconds: u32 },
-  NeedTokenExchange { request: HttpRequest },
-  Completed { tokens: TokenSet },
-  Error(AuthError),
-}
-```
-
-The host:
-
-* executes the step
-* feeds results back into the core
-
-This is what makes cross-language behavior identical.
+* All serialization via `serde`
 
 ---
 
-## 4. C ABI contract (the backbone)
+## 6. C ABI contract
 
 ### Design principles
 
-* Opaque pointers
+* Opaque pointers for client state
 * Explicit memory ownership
-* Flat data structures
-* No callbacks in MVP (poll-based is fine)
-* Versioned symbols
+* Flat data structures (no nested pointers where avoidable)
+* All strings returned by core are freed via `todo_free_string()`
 
-### Example ABI surface (conceptual)
+### Conceptual ABI surface
 
 ```c
-typedef struct AuthContext AuthContext;
+typedef struct TodoClient TodoClient;
 
-AuthContext* auth_new(const AuthConfig* cfg);
-void auth_free(AuthContext* ctx);
+// Lifecycle
+TodoClient* todo_client_new(const char* base_url);
+void todo_client_free(TodoClient* client);
 
-AuthStep auth_next_step(AuthContext* ctx, AuthStepOut* out);
+// Operations — each returns an HttpRequest the host must execute
+HttpRequest* todo_list_todos(TodoClient* client);
+HttpRequest* todo_get_todo(TodoClient* client, const char* id);
+HttpRequest* todo_create_todo(TodoClient* client, const char* title);
+HttpRequest* todo_update_todo(TodoClient* client, const char* id, const char* title, int completed);
+HttpRequest* todo_delete_todo(TodoClient* client, const char* id);
 
-void auth_provide_http_response(
-  AuthContext* ctx,
-  const HttpResponse* response
-);
+// Feed HTTP response back, get typed result
+TodoResult* todo_handle_response(TodoClient* client, const HttpResponse* response);
 
-void auth_tick(AuthContext* ctx, uint64_t now_ms);
+// Memory
+void todo_free_string(char* s);
+void todo_free_request(HttpRequest* req);
+void todo_free_result(TodoResult* result);
 ```
 
-Supporting structs:
-
-* `AuthConfig`
-* `HttpRequest`
-* `HttpResponse`
-* `TokenSet`
-* `AuthError`
-
-Memory rules:
-
-* All strings returned by core are owned by core
-* Host must free via `auth_free_string()`
-
-Claude should document these rules explicitly.
-
 ---
 
-## 5. Platform bindings
+## 7. Platform bindings
 
-### Web (JS + WASM)
+### TypeScript — Node.js (N-API)
+* Native addon loading the compiled Rust library
+* Async wrapper using `fetch` or `node:http`
 
-* Compile Rust core to WASM
-* JS wrapper:
+### TypeScript — Browser (WASM)
+* Compile Rust core to WASM via `wasm-pack`
+* JS wrapper uses `fetch` for HTTP
 
-  * Loads WASM
-  * Converts steps into:
+### Java (JNI + Android)
+* JNI bindings to native Rust library
+* Thin Java wrapper with `CompletableFuture` API
+* Android: same JNI, cross-compiled via NDK
 
-    * `fetch`
-    * browser redirects
-  * Exposes Promise-based API
+### C# (P/Invoke)
+* P/Invoke bindings auto-generated from C header
+* Thin wrapper with `Task`-based async API
 
-MVP API shape:
-
-```js
-const flow = new AuthFlow(config)
-await flow.start()
-```
-
-Internally driven by the state machine.
-
----
-
-### Unity (C#)
-
-* Compile Rust core to native library
-* P/Invoke bindings auto-generated from C headers
-* Thin C# wrapper:
-
-  * Converts steps into `Task`
-  * Handles timers & polling
-  * Leaves storage to caller
-
----
-
-### Unreal (C++)
-
-* Native Rust build
+### C++ (Native)
 * Thin RAII wrapper around C ABI
-* Expose async behavior via callbacks or futures
+* Header-only or minimal `.cpp`
 
 ---
 
-## 6. Integration testing strategy (explicit efficiency win)
+## 8. Integration testing strategy
 
-This is the **killer feature** of this architecture.
+### Test vectors (`test-vectors/`)
 
-### Core idea
+JSON files with:
+* Deterministic inputs (todo data)
+* Expected `HttpRequest` outputs (URL, method, headers, body)
+* Simulated `HttpResponse` inputs
+* Expected parsed results
 
-> The same Rust core + same test vectors are exercised from **Rust, JS, C#, and C++**.
+### Per-language tests
 
-### Step 1: Test vectors
+Each language wrapper:
+1. Loads the same test vectors
+2. Calls the Rust core to build requests
+3. Asserts request matches expected
+4. Feeds simulated responses
+5. Asserts parsed results match expected
 
-Create a `test-vectors/` directory:
-
-```
-test-vectors/
-├─ pkce.json
-├─ device-flow.json
-├─ token-refresh.json
-```
-
-Each file contains:
-
-* deterministic inputs
-* expected outputs
-* simulated HTTP responses
+This proves: **given the same inputs, every language produces identical behavior.**
 
 ---
 
-### Step 2: Rust integration tests
+## 9. MVP milestones
 
-* Run flows using mocked HTTP responses
-* Assert exact state transitions
-* Assert PKCE correctness
-* Assert token expiry logic
+### Phase 1 — Mock server
 
-These become the **reference tests**.
+**Milestone 1 — Mock server**
+* Axum-based CRUD todo API
+* In-memory storage
+* Runs locally
 
----
+### Phase 2 — Rust core + integration tests
 
-### Step 3: Language-level integration tests
+**Milestone 2 — Rust core**
+* DTOs and API client (Todo, CreateTodo, UpdateTodo)
+* HttpRequest / HttpResponse types
+* Request builder + response parser
+* Error types
+* Rust unit tests with test vectors
 
-Each language:
+**Milestone 3 — Integration tests (Rust core against mock server)**
+* Rust integration test: core → real HTTP → mock server
+* Proves the full roundtrip works end-to-end
 
-* Loads the same test vectors
-* Drives the core through the same steps
-* Uses mocked HTTP transport
-* Asserts identical results
+### Phase 3 — C ABI
 
-Example:
-
-* JS test runner (Vitest / Jest)
-* C# NUnit tests
-* C++ Catch2 tests
-
-They all test:
-
-> “Given the same inputs, does the core behave identically?”
-
-This is how you prove:
-
-* No drift
-* No reimplementation bugs
-* One fix fixes all platforms
-
----
-
-### Step 4: End-to-end test (optional for MVP)
-
-* Spin up a mock OAuth server
-* Run:
-
-  * Rust test
-  * JS test
-  * Unity test
-* Verify full device + PKCE flows
-
----
-
-## 7. MVP milestones (hand this to Claude)
-
-### Milestone 1 – Rust core
-
-* PKCE implementation
-* Authorization Code + Device Flow
-* Token parsing + refresh
-* State machine API
-* Rust integration tests
-
-### Milestone 2 – C ABI
-
-* Stable extern "C" interface
-* Header generation
-* Memory ownership docs
+**Milestone 4 — C ABI**
+* `extern "C"` interface
+* C header generation (cbindgen)
+* Memory ownership + free functions
 * C ABI tests in Rust
+* C integration test: C ABI → real HTTP → mock server
 
-### Milestone 3 – Web binding
+### Phase 4 — Host wrappers
 
-* WASM build
-* JS wrapper
-* JS integration tests using test vectors
+**Milestone 5 — TypeScript bindings**
+* WASM build + browser JS wrapper
+* Node.js N-API addon
+* Integration tests using test vectors + mock server
 
-### Milestone 4 – Unity binding
+**Milestone 6 — Java binding**
+* JNI bindings
+* Java wrapper
+* Android cross-compilation (NDK)
+* Integration tests
 
-* Native build
-* C# bindings
-* Unity integration tests using same vectors
+**Milestone 7 — C# binding**
+* P/Invoke bindings
+* C# wrapper
+* Integration tests
 
-### Milestone 5 – Unreal binding
-
-* C++ wrapper
-* Basic integration test
+**Milestone 8 — C++ binding**
+* RAII wrapper
+* Integration tests
 * Confirm parity with Rust tests
 
 ---
 
-## Final guidance to Claude (important tone-setting)
+## Design guidance
 
 > Favor correctness and explicitness over ergonomics.
-> All flows must be driven by the state machine.
+> All API calls must go through the Rust core.
 > If logic is duplicated in a wrapper, it is a bug.
-
----
-
-If you want, next I can:
-
-* turn this into a **Claude-optimized prompt**
-* design the exact C structs
-* propose a concrete PKCE test vector
-* or help you decide WASM vs native build flags
-
-But as-is, this plan is **MVP-ready and implementation-grade**.
-
+> The core does zero I/O. Always.
