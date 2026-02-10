@@ -1,0 +1,15 @@
+language = "C"
+include_guard = "TODO_CLIENT_H"
+no_includes = true
+sys_includes = ["stdint.h", "stdbool.h", "stddef.h"]
+
+[export]
+prefix = "Ffi"
+include = []
+exclude = []
+
+[fn]
+prefix = "FFI"
+
+[enum]
+rename_variants = "QualifiedScreamingSnakeCase"
