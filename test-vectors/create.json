@@ -1,0 +1,43 @@
+{
+  "name": "create-todo",
+  "cases": [
+    {
+      "name": "basic_create",
+      "input": { "title": "Buy milk", "completed": false },
+      "expected_request": {
+        "method": "POST",
+        "path": "/todos",
+        "headers": [["content-type", "application/json"]],
+        "body": { "title": "Buy milk", "completed": false }
+      },
+      "simulated_response": {
+        "status": 201,
+        "body": "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"title\":\"Buy milk\",\"completed\":false}"
+      },
+      "expected_result": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "title": "Buy milk",
+        "completed": false
+      }
+    },
+    {
+      "name": "create_with_completed_true",
+      "input": { "title": "Already done", "completed": true },
+      "expected_request": {
+        "method": "POST",
+        "path": "/todos",
+        "headers": [["content-type", "application/json"]],
+        "body": { "title": "Already done", "completed": true }
+      },
+      "simulated_response": {
+        "status": 201,
+        "body": "{\"id\":\"00000000-0000-0000-0000-000000000002\",\"title\":\"Already done\",\"completed\":true}"
+      },
+      "expected_result": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "title": "Already done",
+        "completed": true
+      }
+    }
+  ]
+}

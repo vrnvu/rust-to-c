@@ -11,7 +11,10 @@
       "Bash(cargo test:*)",
       "Bash(jj commit:*)",
       "Bash(jj file untrack:*)",
-      "Bash(jj squash:*)"
+      "Bash(jj squash:*)",
+      "Bash(cargo doc:*)",
+      "Bash(jj status:*)",
+      "Bash(jj diff:*)"
     ]
   }
 }

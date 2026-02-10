@@ -1,0 +1,34 @@
+{
+  "name": "delete-todo",
+  "cases": [
+    {
+      "name": "success",
+      "input_id": "00000000-0000-0000-0000-000000000001",
+      "expected_request": {
+        "method": "DELETE",
+        "path": "/todos/00000000-0000-0000-0000-000000000001",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 204,
+        "body": ""
+      }
+    },
+    {
+      "name": "not_found",
+      "input_id": "00000000-0000-0000-0000-000000000099",
+      "expected_request": {
+        "method": "DELETE",
+        "path": "/todos/00000000-0000-0000-0000-000000000099",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 404,
+        "body": ""
+      },
+      "expected_error": "NotFound"
+    }
+  ]
+}

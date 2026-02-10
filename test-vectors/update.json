@@ -1,0 +1,45 @@
+{
+  "name": "update-todo",
+  "cases": [
+    {
+      "name": "update_title_only",
+      "input_id": "00000000-0000-0000-0000-000000000001",
+      "input": { "title": "Updated title" },
+      "expected_request": {
+        "method": "PUT",
+        "path": "/todos/00000000-0000-0000-0000-000000000001",
+        "headers": [["content-type", "application/json"]],
+        "body": { "title": "Updated title" }
+      },
+      "simulated_response": {
+        "status": 200,
+        "body": "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"title\":\"Updated title\",\"completed\":false}"
+      },
+      "expected_result": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "title": "Updated title",
+        "completed": false
+      }
+    },
+    {
+      "name": "update_completed_only",
+      "input_id": "00000000-0000-0000-0000-000000000001",
+      "input": { "completed": true },
+      "expected_request": {
+        "method": "PUT",
+        "path": "/todos/00000000-0000-0000-0000-000000000001",
+        "headers": [["content-type", "application/json"]],
+        "body": { "completed": true }
+      },
+      "simulated_response": {
+        "status": 200,
+        "body": "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"title\":\"Test\",\"completed\":true}"
+      },
+      "expected_result": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "title": "Test",
+        "completed": true
+      }
+    }
+  ]
+}

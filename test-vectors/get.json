@@ -1,0 +1,39 @@
+{
+  "name": "get-todo",
+  "cases": [
+    {
+      "name": "found",
+      "input_id": "00000000-0000-0000-0000-000000000001",
+      "expected_request": {
+        "method": "GET",
+        "path": "/todos/00000000-0000-0000-0000-000000000001",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 200,
+        "body": "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"title\":\"Test\",\"completed\":false}"
+      },
+      "expected_result": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "title": "Test",
+        "completed": false
+      }
+    },
+    {
+      "name": "not_found",
+      "input_id": "00000000-0000-0000-0000-000000000099",
+      "expected_request": {
+        "method": "GET",
+        "path": "/todos/00000000-0000-0000-0000-000000000099",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 404,
+        "body": ""
+      },
+      "expected_error": "NotFound"
+    }
+  ]
+}

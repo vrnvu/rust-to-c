@@ -1,0 +1,36 @@
+{
+  "name": "list-todos",
+  "cases": [
+    {
+      "name": "empty_list",
+      "expected_request": {
+        "method": "GET",
+        "path": "/todos",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 200,
+        "body": "[]"
+      },
+      "expected_result": []
+    },
+    {
+      "name": "two_items",
+      "expected_request": {
+        "method": "GET",
+        "path": "/todos",
+        "headers": [],
+        "body": null
+      },
+      "simulated_response": {
+        "status": 200,
+        "body": "[{\"id\":\"00000000-0000-0000-0000-000000000001\",\"title\":\"First\",\"completed\":false},{\"id\":\"00000000-0000-0000-0000-000000000002\",\"title\":\"Second\",\"completed\":true}]"
+      },
+      "expected_result": [
+        { "id": "00000000-0000-0000-0000-000000000001", "title": "First", "completed": false },
+        { "id": "00000000-0000-0000-0000-000000000002", "title": "Second", "completed": true }
+      ]
+    }
+  ]
+}
