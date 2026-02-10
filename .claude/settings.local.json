@@ -14,7 +14,8 @@
       "Bash(jj squash:*)",
       "Bash(cargo doc:*)",
       "Bash(jj status:*)",
-      "Bash(jj diff:*)"
+      "Bash(jj diff:*)",
+      "Bash(jj log:*)"
     ]
   }
 }

@@ -42,12 +42,24 @@ fn execute(req: todo_core::HttpRequest) -> HttpResponse {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn crud_lifecycle() {
+#[test]
+fn crud_lifecycle() {
     // Step 1: start mock server on a random port.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(mock_server::run(listener));
+    let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = std_listener.local_addr().unwrap();
+    std_listener.set_nonblocking(true).unwrap();
+
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
+            mock_server::run(listener).await
+        })
+        .unwrap();
+    });
 
     let client = TodoClient::new(&format!("http://{addr}"));
 
